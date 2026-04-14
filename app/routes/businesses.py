@@ -10,7 +10,7 @@ import shutil
 from slugify import slugify
 
 from app.database import get_db
-from app.models.models import Business, BusinessImage, BusinessLocation, Category
+from app.models.models import Business, BusinessImage, BusinessLocation, Category, BusinessStatus
 from app.schemas.schemas import (
     BusinessCreate, BusinessUpdate,
     BusinessResponse, BusinessListResponse
@@ -78,3 +78,52 @@ def list_businesses(
         )
     
     return query.offset(offset).limit(limit).distinct().all()
+
+@router.get("/{slig}", response_model=BusinessResponse)
+def get_business(slug: str, db: Session = Depends(get_db)):
+    business = db.query(Business).filter(Business.slug == slug).first()
+    if not business:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Business with slug '{slug} not found'"
+        )
+    return business
+
+
+@router.post("/", response_model=BusinessCreate, status_code=status.HTTP_201_CREATED)
+def create_business(payload: BusinessCreate, db: Session = Depends(get_db)):
+    slug = make_unique_slug(payload.name, db)
+    
+    business = Business(
+        # Hardcoded owner for now — replace with auth token in production
+        owner_id=db.query(Business).first.owner_id if db.query(Business).first() else uuid.uuid4,
+        name=payload.name,
+        slug=slug,
+        description=payload.description,
+        category_id=payload.category_id,
+        phone=payload.phone,
+        email=payload.email,
+        website=payload.website,
+        status=BusinessStatus.PENDING,
+    )
+    db.add(business)
+    db.flush()
+
+    # Create location if provided
+    if payload.location:
+        loc = payload.location
+        location = BusinessLocation(
+            street=loc.street,
+            city=loc.city,
+            country=loc.country,
+            postal_code=loc.postal_code,
+            latitude=loc.latitude,
+            longitude=loc.longitude,
+            is_primary=True,
+            business=business
+        )
+        db.add(location)
+
+    db.commit()
+    db.refresh(business)
+    return business
