@@ -193,3 +193,11 @@ def upload_image(
     return {"url": f"/static/uploads/{filename}", "image_id": str(image.id)}
 
     
+@router.delete("/{business_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_business(business_id: uuid.UUID, db: Session=Depends(get_db)):
+    business = db.query(Business).filter(Business.id == business_id).first()
+    if not business:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
+    
+    db.delete(business)
+    db.commit
