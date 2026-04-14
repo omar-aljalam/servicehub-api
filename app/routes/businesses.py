@@ -127,3 +127,69 @@ def create_business(payload: BusinessCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(business)
     return business
+
+@router.patch("/{business_id}", response_model=BusinessListResponse)
+def update_business(
+    business_id: uuid.UUID,
+    payload: BusinessUpdate,
+    db: Session=Depends(get_db),
+):
+    business = db.query(Business).filter(Business.id == business_id).first()
+    if not business:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Business not found")
+    
+    update_data = payload.model_dump(exclude_unset=True)
+
+    if "name" in update_data:
+        update_data["slug"] = make_unique_slug(update_data["name"], db, exclude_id=business_id)
+
+    for field, value in update_data.items():
+        setattr(business, field, value)
+
+    db.commit()
+    db.refresh(business)
+    return business
+
+@router.post("/{business_id}/images", response_model=dict)
+def upload_image(
+    business_id: uuid.UUID,
+    is_logo: bool=False,
+    file: UploadFile = File(...),
+    db: Session=Depends(get_db)
+):
+    business = db.query(Business).filter(Business.id == business_id).first()
+    if not business:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Business not found")
+    
+    allowed_types = {".jpg", ".jpeg", ".png", ".webp"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type '{ext}' not allowed. Use {', '.join(allowed_types)}"
+        )
+    filename = f"{uuid.uuid4()}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    max_order = db.query(BusinessImage).filter(
+        BusinessImage.business_id == business_id
+    ).count()
+
+    image = BusinessImage(
+        business_id=business_id,
+        url=f"/static/uploads/{filename}",
+        alt_text=file.filename,
+        is_logo=is_logo,
+        display_order=max_order,
+    )
+    db.add(image)
+    db.commit()
+    db.refresh(image)
+
+    return {"url": f"/static/uploads/{filename}", "image_id": str(image.id)}
+
+    
