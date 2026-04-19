@@ -2,6 +2,9 @@
 Populate the database with realistic fake data.
 Made using Claude Code
 """
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,15 +12,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import uuid
 import random
 from faker import Faker
-from passlib.context import CryptContext
+import bcrypt
 from slugify import slugify
 from sqlalchemy.orm import Session
 
 from app.database import engine, SessionLocal, Base
-from app.models.models import User, Category, Business, BusinessLocation, BusinessImage
+from app.models.models import User, Category, Business, BusinessLocation, BusinessImage, BusinessStatus
 
 fake = Faker()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ─────────────────────────────────────────────────────────────
 # SEED DATA CONSTANTS
@@ -49,7 +51,7 @@ PLACEHOLDER_GALLERY_URLS = [
     "https://placehold.co/800x600/EDE9FE/4C1D95?text=Work+Photo",
 ]
 
-STATUSES = ["active", "active", "active", "pending", "inactive"]
+STATUSES = [BusinessStatus.ACTIVE, BusinessStatus.ACTIVE, BusinessStatus.ACTIVE, BusinessStatus.PENDING, BusinessStatus.INACTIVE]
 # Weighted: most businesses should be active, some pending, few inactive.
 
 
@@ -95,11 +97,14 @@ def create_users(db: Session, count: int = 10) -> list[User]:
     Insert fake users with hashed passwords.
     """
     users = []
+    password = "password123".encode("utf-8")
+    salt = bcrypt.gensalt()
+    hashed_pw = bcrypt.hashpw(password, salt).decode("utf-8")
     for _ in range(count):
         user = User(
             id=uuid.uuid4(),
             email=fake.unique.email(),
-            password_hash=pwd_context.hash("password123"),
+            password_hash=hashed_pw,
             full_name=fake.name(),
         )
         db.add(user)
@@ -193,7 +198,7 @@ def create_businesses(
 
 def seed():
     print("\n=== Marketplace DB Seeder ===\n")
-
+    print(f"HELO THIS IS: {engine}")
     print("Step 1: Dropping and recreating all tables...")
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)

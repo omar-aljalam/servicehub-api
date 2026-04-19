@@ -79,7 +79,7 @@ def list_businesses(
     
     return query.offset(offset).limit(limit).distinct().all()
 
-@router.get("/{slig}", response_model=BusinessResponse)
+@router.get("/{slug}", response_model=BusinessResponse)
 def get_business(slug: str, db: Session = Depends(get_db)):
     business = db.query(Business).filter(Business.slug == slug).first()
     if not business:
